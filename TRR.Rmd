@@ -1,0 +1,51 @@
+---
+title: "SEA rsfcMRI - Longitudinal Descriptives"
+author: "John Flournoy"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+knit: (function(inputFile, encoding) { rmarkdown::render(inputFile, encoding = encoding, output_file = file.path(dirname(inputFile), 'sea_rsfc-initial_icc_report-orig.html')) })
+---
+
+```{css, echo=FALSE}
+@import url('https://fonts.googleapis.com/css?family=Didact+Gothic&display=swap');
+@import url('https://fonts.googleapis.com/css?family=Fira+Code&display=swap');
+body{
+  font-family: 'Didact Gothic',  sans-serif;
+}
+pre code {
+  font-family: 'Fira Code',  monospace;
+}
+```
+
+```{r setup}
+fslong <- FALSE ### CHANGE FILE NAME TOO!
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(showtext)
+#{.tabset}
+
+font_add_google("Didact Gothic", "Didact Gothic")
+
+
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+#https://www.instagram.com/p/CC3EvmLgt2m/?utm_source=ig_web_copy_link
+apal <- paste0('#',c('2C2B2B', 'F9773B', 'FFEA8C', '1389E6', 'D2E5E7'))
+jftheme <- theme_minimal() +  
+    theme(text = element_text(family = 'Didact Gothic', size = 14),
+          panel.background = element_rect(fill = apal[[5]], size = 0, color = apal[[2]]),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(), 
+          strip.background = element_rect(fill = apal[[3]], size = 0),
+          strip.text = element_text(color = '#222222'),
+          axis.text =  element_text(color = apal[[1]]), axis.title = element_text(color = apal[[1]]))
+knitr::read_chunk('collect_trr_output.R')
+```
+
+```{r collect_trr_output}
+```
