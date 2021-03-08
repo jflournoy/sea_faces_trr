@@ -5,14 +5,14 @@ library(data.table)
 library(ggplot2) 
 
 task_id <- as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID'))
+setDTthreads(4)
 
 if(is.na(task_id)){
   message('Not running as slurm array, setting ROI to some value')
-  this_ROI <- 3 #TO BE SET BY SLURM ENV VAR
+  this_ROI <- 243 #TO BE SET BY SLURM ENV VAR
 } else {
   this_ROI <- task_id
 }
-
 
 d <- readRDS('sch400_RML_fit_processed.RDS')
 d <- d[cond %in% c('Fear', 'Calm')]
@@ -33,7 +33,7 @@ chains <- 4
 grouping_term <- 'id'
 modelForm <- as.formula(est|se(se, sigma = TRUE) ~ 0 + sess + sess:cond_code + (0 + sess | id) + (0 + sess:cond_code | id))
 bigModelForm <- bf(est|se(se, sigma = TRUE) ~ 0 + sess + sess:cond_code + (0 + sess || id) + (0 + sess:cond_code || id))
-
+bigCovarModelForm <- bf(est|se(se, sigma = TRUE) ~ 0 + sess + sess:cond_code + (0 + sess | id) + (0 + sess:cond_code | id))
 
 d_compile <- d[sess %in% c("01", "02") &
                  ROI == this_ROI]
@@ -206,3 +206,23 @@ fm_bigAR <- update(compiled_ARmodel, formula. = ar_model, newdata = re_dt,
                  iter = 2000, control = list(adapt_delta = 0.99, max_treedepth = 15), 
                  file = paste0('fits/fit-ROI', this_ROI, '-bigAR'))
 summary(fm_bigAR)
+
+
+### Big Full Covar model:
+compiled_bigcovmodel<- brm(bigCovarModelForm, data = d_bigmodel, 
+                           family = 'gaussian',
+                           chains = 1, cores = 1,
+                           iter = 1, control = list(adapt_delta = 0.99, max_treedepth = 15), 
+                           file = 'fits/compiled_bigcov')
+# summary(compiled_bigcovmodel)
+fm_bigcov <- update(compiled_bigcovmodel, formula. = bigCovarModelForm, newdata = d_bigmodel, 
+                    family = 'gaussian',
+                    chains = 4, cores = 4,
+                    iter = 2000, control = list(adapt_delta = 0.99, max_treedepth = 15), 
+                    file = paste0('fits/fit-ROI', this_ROI, '-bigcov'))
+
+summary(fm_bigcov)
+parnames(fm_bigcov)
+bayesplot::mcmc_areas_ridges(fm_bigcov, pars = sprintf('cor_id__sess%02d:cond_code__sess%02d:cond_code', 1:9, 2:10), 
+                             prob = .95, prob_outer = .99)
+
