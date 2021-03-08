@@ -15,6 +15,12 @@ if(is.na(task_id)){
 }
 
 d <- readRDS('sch400_RML_fit_processed.RDS')
+d[, ROI := as.numeric(ROI) + 1] #account for 0 indexing
+
+if(! identical(range(as.numeric(d$ROI)), c(1, 400)) ){
+  stop("Error in ROI Indexing: \n```\nd <- readRDS('sch400_RML_fit_processed.RDS')\nd[, ROI := as.numeric(ROI) + 1]\n```")
+}
+
 d <- d[cond %in% c('Fear', 'Calm')]
 
 faccols <- c('sess', 'cond', 'id')
@@ -100,7 +106,7 @@ sum_r <- lapply(r, function(r_){
                             x >= lq[1] & x <= lq[2]), aes(x=x,y=y, color='gray'), alpha=0.15) +
     xlab("TRR") +
     theme(legend.position="none", axis.text=element_text(size=18), axis.title=element_text(size=18))
-  # ggsave(paste0('plots/plot-', r_name, '-ave.pdf'), plot = p1)
+  ggsave(paste0('plots/plot-', r_name, '-ave.pdf'), plot = p1)
   
   p2 <- ggplot(data.frame(x=mm), aes(x=x)) + theme_bw() + geom_density(size=2) +
     geom_vline(aes(xintercept= mp), color="blue", linetype="dashed", size=2) +
@@ -108,7 +114,7 @@ sum_r <- lapply(r, function(r_){
                             x >= mq[1] & x <= mq[2]), aes(x=x,y=y, color='gray'), alpha=0.15) +
     xlab("TRR") +
     theme(legend.position="none", axis.text=element_text(size=18), axis.title=element_text(size=18))
-  # ggsave(paste0('plots/plot-ROI_', this_ROI, '-',  r_name, '-con.pdf'), plot = p2)
+  ggsave(paste0('plots/plot-ROI_', this_ROI, '-',  r_name, '-con.pdf'), plot = p2)
   
   return(list(p_ave = p1, p_con = p2, summary = d_res))
 })
@@ -116,7 +122,7 @@ sum_r <- lapply(r, function(r_){
 big_df <- data.table::rbindlist(lapply(sum_r, `[[`, 'summary'))
 readr::write_csv(big_df, paste0('csv/TRR-ROI_', this_ROI, '.csv'))
 
-##ADD metanalysis of fisher-z transformed.
+##metanalysis of fisher-z transformed.
 
 TRR_z_cont_est_se <- data.table::rbindlist(lapply(r, function(r_){
   fm <- r_[['fm']]
@@ -138,33 +144,6 @@ meta <- brms::brm(z_hat|se(zse, sigma = FALSE) ~ 1 + (1 | sid), data = TRR_z_con
                   control = list(adapt_delta = 0.99, max_treedepth = 15),
                   prior = priors,
                   file = paste0('fits/meta-', this_ROI))
-# pp_check(meta)
-# summary(meta)
-
-# parnames(meta)
-# bayesplot::mcmc_rank_overlay(meta, pars = c('b_Intercept', 'sd_sid__Intercept'))
-
-# TRR_z_posteriors <- data.table::rbindlist(lapply(r, function(r_){
-#   fm <- r_[['fm']]
-# 
-#   pars <- parnames(fm)
-#   corsesscondname <- pars[grepl('cor_\\w+__sess\\d{2}:cond_code__sess\\d{2}:cond_code$', pars)]
-#   mm <- posterior_samples(fm, pars = corsesscondname)[[1]]
-# 
-#   z <- atanh(mm)
-# 
-#   return(data.frame(z = z, pair = r_[['name']]))
-# }))
-
-# mean(TRR_z_posteriors$z)
-# sd(TRR_z_posteriors$z)
-# 
-# get_prior(z ~ 1 + (1 | pair), data = TRR_z_posteriors)
-# meta_2 <- brms::brm(z ~ 1 + (1 | pair), data = TRR_z_posteriors,
-#                     cores = chains, chains = chains, iter = 2000,
-#                     file = paste0('fits/meta_2-', this_ROI))
-# pp_check(meta_2)
-# summary(meta_2)
 
 ### Big model + 2nd stage AR approach:
 d_bigmodel <- d[ROI == this_ROI]

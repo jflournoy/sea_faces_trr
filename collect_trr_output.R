@@ -5,7 +5,7 @@ library(parallel)
 #values. In other words, all fits are labeled with ROI 0-399 and all Sch400 mask
 #voxel values are 1-400.
 
-### Note: Sch400 ROIs for dACC: 
+### Note: Sch400 ROIs for dACC: ambiguous
 
 meta_fn <- dir('fits', pattern = 'meta-.*rds', full.names = TRUE)
 AR_fn <- dir('fits', pattern = 'fit.*bigAR\\.rds', full.names = TRUE)
