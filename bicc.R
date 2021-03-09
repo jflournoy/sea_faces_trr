@@ -1,4 +1,4 @@
-#Largely taken from: https://github.com/afni/afni/blob/2e428852abd096340cf8133f014e68093b65d773/src/R_scripts/TRR.R
+#Much taken from: https://github.com/afni/afni/blob/2e428852abd096340cf8133f014e68093b65d773/src/R_scripts/TRR.R
 library(brms)
 library(coda)
 library(data.table)
@@ -191,6 +191,86 @@ comp_plot <- ggplot(merge(fm_bigcov_sum_dt, big_df, by = c('effect', 'rep_name')
   coord_cartesian(x = c(-1, 1), y = c(-1, 1)) + 
   facet_grid(effect ~ .)
 ggsave(paste0('plots/plot-comp-ROI_', this_ROI, '.pdf'), plot = comp_plot)
+
+####--------------
+### Harvard 0xford
+##----------------
+
+if(is.na(task_id)){
+  message('Not running as slurm array, setting ROI to some value')
+  this_ho_ROI <- 10 #TO BE SET BY SLURM ENV VAR
+} else {
+  if(task_id < 1 | task_id > 21) stop(sprintf('HO ROI task-id out of range: %d', task_id))
+  this_ho_ROI <- task_id
+}
+
+dh <- readRDS('HO_RML_fit_processed.RDS')
+dh[, ROI := as.numeric(ROI) + 1] #account for 0 indexing
+
+if(! identical(range(as.numeric(dh$ROI)), c(1, 21)) ){
+  stop("Error in HO ROI Indexing")
+}
+
+dh <- dh[cond %in% c('Fear', 'Calm')]
+
+faccols <- c('sess', 'cond', 'id')
+dh[, (faccols) := lapply(.SD, as.factor), .SDcols = faccols]
+dh[, cond_code := fifelse(cond == levels(cond)[1], -0.5, 0.5)]
+
+### Big Full Covar model:
+d_ho_bigmodel <- dh[ROI == this_ho_ROI]
+fm_ho_bigcov <- update(compiled_bigcovmodel, formula. = bigCovarModelForm, newdata = d_ho_bigmodel, 
+                       family = 'gaussian',
+                       chains = chains, cores = chains,
+                       iter = iterations, control = list(adapt_delta = 0.99, max_treedepth = 15), 
+                       file = paste0('fits/fit-HO-ROI', this_ho_ROI, '-bigcov'))
+
+# summary(fm_ho_bigcov)
+# parnames(fm_ho_bigcov)
+fm_ho_bigcov_arr <- as.array(fm_ho_bigcov, pars = c(sprintf('cor_id__sess%02d:cond_code__sess%02d:cond_code', 1:9, 2:10),
+                                              sprintf('cor_id__sess%02d__sess%02d', 1:9, 2:10)))
+dimnames(fm_ho_bigcov_arr)$parameters <- c(sprintf('cor(sess%02d,sess%02d)_cont', 1:9, 2:10),
+                                        sprintf('cor(sess%02d,sess%02d)_avg', 1:9, 2:10))
+p1 <- bayesplot::mcmc_areas(fm_ho_bigcov_arr, pars = sprintf('cor(sess%02d,sess%02d)_cont', 1:9, 2:10), 
+                            prob = .95, prob_outer = .99) 
+p2 <- bayesplot::mcmc_areas(fm_ho_bigcov_arr, pars = sprintf('cor(sess%02d,sess%02d)_avg', 1:9, 2:10), 
+                            prob = .95, prob_outer = .99)
+ggsave(paste0('plots/plot-cov-HO-ROI_', this_ho_ROI, '-con.pdf'), plot = p1)
+ggsave(paste0('plots/plot-cov-HO-ROI_', this_ho_ROI, '-ave.pdf'), plot = p2)
+
+#Extract correlations from this model to save
+##metanalysis of fisher-z transformed.
+
+fm_ho_bigcov_post_samp <- posterior_samples(fm_ho_bigcov, pars = c(sprintf('cor_id__sess%02d:cond_code__sess%02d:cond_code', 1:9, 2:10),
+                                                             sprintf('cor_id__sess%02d__sess%02d', 1:9, 2:10)))
+fm_ho_bigcov_post_sum <- t(sapply(fm_ho_bigcov_post_samp, function(x) {
+  c(trr = mean(x), 
+    trr_lower = quantile(x, probs = .025)[[1]], trr_upper = quantile(x, probs = .975)[[1]],
+    z = mean(atanh(x)), z_se = sd(atanh(x)))
+}))
+
+fm_ho_bigcov_post_sum_rn <- rownames(fm_ho_bigcov_post_sum)
+fm_ho_bigcov_sum_dt <- data.table(fm_ho_bigcov_post_sum)
+fm_ho_bigcov_sum_dt[, effect := fifelse(grepl('cond_code', fm_ho_bigcov_post_sum_rn),
+                                     'contrast', 'average')]
+fm_ho_bigcov_sum_dt[, rep_name := gsub('cor_id__sess(\\d{2})(?::cond_code)*__sess(\\d{2})(?::cond_code)*', '\\1_\\2', fm_ho_bigcov_post_sum_rn)]
+
+meta_fit_ho_cont <- update(meta_compiled, formula. = meta_form, newdata = fm_ho_bigcov_sum_dt[effect == 'contrast'],
+                        family = 'gaussian',
+                        chains = chains, cores = chains, iter = iterations, 
+                        control = list(adapt_delta = 0.99, max_treedepth = 15),
+                        file = paste0('fits/fit-HO-ROI', this_ROI, '-meta_cont'))
+meta_fit_ho_avg <- update(meta_compiled, formula. = meta_form, newdata = fm_ho_bigcov_sum_dt[effect == 'average'],
+                       family = 'gaussian',
+                       chains = chains, cores = chains, iter = iterations, 
+                       control = list(adapt_delta = 0.99, max_treedepth = 15),
+                       file = paste0('fits/fit-HO-ROI', this_ROI, '-meta_avg'))
+p1_comb <- bayesplot::mcmc_areas(meta_fit_ho_cont, pars = 'b_Intercept', 
+                                 prob = .95, prob_outer = .99) 
+p2_comb <- bayesplot::mcmc_areas(meta_fit_ho_avg, pars = 'b_Intercept', 
+                                 prob = .95, prob_outer = .99)
+ggsave(paste0('plots/plot-covmeta-HO-ROI_', this_ROI, '-con.pdf'), plot = p1_comb)
+ggsave(paste0('plots/plot-covmeta-HO-ROI_', this_ROI, '-avg.pdf'), plot = p2_comb)
 
 if(FALSE){
   ### Big model + 2nd stage AR approach:

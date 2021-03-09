@@ -1,7 +1,7 @@
 library(data.table)
 setDTthreads(5)
 
-collect_data <- function(filelist, outname){
+collect_data <- function(filelist, outname, fn_regex){
   if(!file.exists(outname)){
     col.names_ <- expand.grid(stat = c('est', 't-score'), basis = c('t', 'dt'), block = 1:3, cond = c('Calm', 'Fear', 'Happy'))
     col.names_ <- col.names_[, dim(col.names_)[[2]]:1]
@@ -13,8 +13,6 @@ collect_data <- function(filelist, outname){
   } else {
     d <- readRDS(outname)
   }
-  
-  fn_regex <- 'afni_out//(\\d{4})_(\\d{2})_(\\d+)_REMLfit.1D'
   
   d <- d[, F := NULL]
   d[, c('id', 'sess', 'ROI') := 
@@ -46,9 +44,11 @@ f <- dir('afni_out/', pattern = '^\\d{4}.*REML.*.1D', full.names = TRUE)
 fn <- 'sch400_REML_fit.RDS'
 f_ho <- dir('afni_out/', pattern = '^HO_\\d{4}.*REML.*.1D', full.names = TRUE)
 fn_ho <- 'HO_REML_fit.RDS'
+fn_regex <- 'afni_out//(\\d{4})_(\\d{2})_(\\d+)_REMLfit.1D'
+fn_regex_ho <- 'afni_out//HO_(\\d{4})_(\\d{2})_(\\d+)_REMLfit.1D'
 
-d_w_sch <- collect_data(f, fn)
-d_w_ho <- collect_data(f_ho, fn_ho)
+d_w_sch <- collect_data(f, fn, fn_regex)
+d_w_ho <- collect_data(f_ho, fn_ho, fn_regex_ho)
 
 readr::write_rds(d_w, 'sch400_RML_fit_processed.RDS')
 readr::write_rds(d_w_ho, 'HO_RML_fit_processed.RDS')
