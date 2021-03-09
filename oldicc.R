@@ -64,7 +64,7 @@ compiled_meta_fit <- brm(meta_icc_form, data = meta_icc_dt,
                 family = 'gaussian',
                 chains = 1, cores = 1, iter = 1, 
                 control = list(adapt_delta = 0.99, max_treedepth = 15),
-                file = 'fits/copiled_icc_meta')
+                file = 'fits/compiled_icc_meta')
 meta_fit <- update(compiled_meta_fit, formula. = meta_icc_form, newdata = meta_icc_dt,
                 family = 'gaussian',
                 chains = chains, cores = chains, iter = iterations, 
