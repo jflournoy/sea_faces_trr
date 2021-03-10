@@ -12,6 +12,7 @@ if(is.na(task_id)){
   this_ROI <- 243 #TO BE SET BY SLURM ENV VAR
 } else {
   this_ROI <- task_id
+  message('Running as slurm array with task id: ', task_id)
 }
 
 d <- readRDS('sch400_RML_fit_processed.RDS')
@@ -55,7 +56,7 @@ fm_bigcov <- update(compiled_bigcovmodel, formula. = bigCovarModelForm, newdata 
                     file = paste0('fits/fit-ROI', this_ROI, '-bigcov'))
 
 summary(fm_bigcov)
-parnames(fm_bigcov)
+# parnames(fm_bigcov)
 fm_bigcov_arr <- as.array(fm_bigcov, pars = c(sprintf('cor_id__sess%02d:cond_code__sess%02d:cond_code', 1:9, 2:10),
                                               sprintf('cor_id__sess%02d__sess%02d', 1:9, 2:10)))
 dimnames(fm_bigcov_arr)$parameters <- c(sprintf('cor(sess%02d,sess%02d)_cont', 1:9, 2:10),
@@ -99,6 +100,8 @@ meta_fit_avg <- update(meta_compiled, formula. = meta_form, newdata = fm_bigcov_
                         chains = chains, cores = chains, iter = iterations, 
                         control = list(adapt_delta = 0.99, max_treedepth = 15),
                         file = paste0('fits/fit-ROI', this_ROI, '-meta_avg'))
+summary(meta_fit_cont)
+summary(meta_fit_avg)
 p1_comb <- bayesplot::mcmc_areas(meta_fit_cont, pars = 'b_Intercept', 
                             prob = .95, prob_outer = .99) 
 p2_comb <- bayesplot::mcmc_areas(meta_fit_avg, pars = 'b_Intercept', 
@@ -203,13 +206,14 @@ if(is.na(task_id)){
   if(task_id < 1 | task_id > 21) {
     #yeah, this is a pretty hackish way to do this.
     warning(sprintf('HO ROI task-id out of range: %d', task_id))
-    task_id <- NULL
+    this_ho_ROI <- NULL
   } else {
-    this_ho_ROI <- task_id    
+    this_ho_ROI <- task_id
+    message('Running as slurm array with task id: ', task_id)
   }
 }
 
-if(! is.null(task_id)){
+if(! is.null(this_ho_ROI)){
   dh <- readRDS('HO_RML_fit_processed.RDS')
   dh[, ROI := as.numeric(ROI) + 1] #account for 0 indexing
   
@@ -277,48 +281,4 @@ if(! is.null(task_id)){
                                    prob = .95, prob_outer = .99)
   ggsave(paste0('plots/plot-covmeta-HO-ROI_', this_ROI, '-con.pdf'), plot = p1_comb)
   ggsave(paste0('plots/plot-covmeta-HO-ROI_', this_ROI, '-avg.pdf'), plot = p2_comb)
-}
-
-
-if(FALSE){
-  ### Big model + 2nd stage AR approach:
-  bigModelForm <- bf(est|se(se, sigma = TRUE) ~ 0 + sess + sess:cond_code + (0 + sess || id) + (0 + sess:cond_code || id))
-  
-  compiled_bigmodel<- brm(bigModelForm, data = d_bigmodel, 
-                          family = 'gaussian',
-                          chains = 1, cores = 1,
-                          iter = 1, control = list(adapt_delta = 0.99, max_treedepth = 15), 
-                          file = 'fits/compiled_big')
-  
-  fm_big <- update(compiled_bigmodel, formula. = bigModelForm, newdata = d_bigmodel, 
-                   family = 'gaussian',
-                   chains = 4, cores = 4,
-                   iter = 2000, control = list(adapt_delta = 0.99, max_treedepth = 15), 
-                   file = paste0('fits/fit-ROI', this_ROI, '-big'))
-  
-  summary(fm_big)
-  big_RE <- ranef(fm_big, summary =  FALSE) #check that these are right
-  dim(big_RE$id)
-  sess_contrast_ids <- grep('cond', dimnames(big_RE$id)[[3]])
-  mean_dt <- melt(as.data.table(apply(big_RE$id[,,sess_contrast_ids], c(2,3), mean), keep.rownames = 'id'),
-                  value.name = 'mean', id.vars = 'id')
-  sd_dt <- melt(as.data.table(apply(big_RE$id[,,sess_contrast_ids], c(2,3), sd), keep.rownames = 'id'),
-                value.name = 'sd', id.vars = 'id')
-  
-  re_dt <- mean_dt[sd_dt, on = c('id', 'variable')] 
-  re_dt[, time := as.numeric(gsub('sess(\\d{2}):cond_code', '\\1', variable))]
-  ar_model <- bf(mean | se(sd, sigma = TRUE) ~ ar(time = time, gr = id, cov = TRUE))
-  brms::get_prior(ar_model, data = re_dt)
-  
-  compiled_ARmodel<- brm(ar_model, data = re_dt, 
-                         family = 'gaussian',
-                         chains = 1, cores = 1,
-                         iter = 1, control = list(adapt_delta = 0.99, max_treedepth = 15), 
-                         file = 'fits/compiled_AR')
-  fm_bigAR <- update(compiled_ARmodel, formula. = ar_model, newdata = re_dt, 
-                     family = 'gaussian',
-                     chains = 4, cores = 4,
-                     iter = 2000, control = list(adapt_delta = 0.99, max_treedepth = 15), 
-                     file = paste0('fits/fit-ROI', this_ROI, '-bigAR'))
-  summary(fm_bigAR)
 }
